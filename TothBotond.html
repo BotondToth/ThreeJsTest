@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+
+<html lang="hu">
+	<head>
+        <title>Fejlett grafikai algoritmusok beadandó</title>
+        <script src="js/three.min.js"></script>
+        <script src="js/dat.gui.min.js"></script>
+        <script src="js/stats.min.js"></script>
+        <script src="js/OrbitControls.js"></script>
+		<style>
+            body {
+                margin: 0;
+                overflow: hidden;
+            }
+        </style>
+	</head>
+	<body>
+    <div id="Stats-output">
+    <script>
+            const objectsToGenerate = 20;
+            let sphereMovementSpeed = 0.02,
+                verticalMovementValue = 5;
+
+            initStats = () => {
+                const stats = new Stats();
+                stats.setMode(0);
+
+                stats.domElement.style.position = 'absolute';
+                stats.domElement.style.left = '0px';
+                stats.domElement.style.top = '0px';
+
+                document.getElementById("Stats-output").appendChild(stats.domElement);
+
+                return stats;
+            };
+
+            generateCollidableBoxes = () => {
+                let texture = new THREE.TextureLoader().load("./assets/textures/general/brick-wall.jpg");
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(4, 4);
+
+                let generatedObjects = [];
+                let currentXCoord = 100;
+                const lowObject = 3, highObject = 20;
+
+                let collideGeometry = new THREE.BoxGeometry( 3, 20, 3);
+                let material = new THREE.MeshBasicMaterial( {map: texture} );
+                for (let i = 0; i < objectsToGenerate; i++) {
+                    const randomPlacement = Math.floor(Math.random() * 10) + 1;
+                    const randomDistanceBetweenBricks = Math.floor(Math.random() * 2) + 1;
+                    let cube = new THREE.Mesh( collideGeometry, material );
+                    cube.position.x += currentXCoord;
+                    cube.position.y += randomPlacement <= 5 ? lowObject : highObject;
+                    currentXCoord += 20 + randomDistanceBetweenBricks * 10;
+                    generatedObjects.push(cube);
+                }
+                
+                return generatedObjects;
+            }
+        </script>
+
+		<script>
+            let renderer,
+                camera,
+                stats = initStats(),
+                time,
+                scene = new THREE.Scene();
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+                renderer = new THREE.WebGLRenderer();
+
+                let lightAmb = new THREE.AmbientLight(0x777777),
+                    sphereTexture = new THREE.TextureLoader().load("./assets/textures/general/metal-floor.jpg");
+                scene.add(lightAmb);
+
+                scene.fog = new THREE.FogExp2( 0x000000, 0.0128 );
+                renderer.setClearColor( scene.fog.color, 1 );
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                document.body.appendChild(renderer.domElement);
+
+                let sphereGeometry = new THREE.SphereGeometry(3, 32, 32),
+                    sphereMaterial = new THREE.MeshLambertMaterial({map: sphereTexture});
+
+                sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(0, 4, 0);
+                sphere.name = 'ball';
+
+                let collidableObjects = generateCollidableBoxes();
+
+                collidableObjects.forEach(cube => {
+                    scene.add( cube );
+                });
+
+                const loader = new THREE.TextureLoader();
+                loader.load("./assets/textures/general/background.jpg" , function(texture)
+                {
+                    scene.background = texture;
+                });
+
+                scene.add(sphere);
+                camera.position.x = 2;
+                camera.position.y = 10;
+                camera.position.z = 20;
+
+
+                let light = new THREE.AmbientLight( 0x404040 );
+                scene.add( light );
+
+                // White directional light at 70% intensity shining from the top.
+                let directionalLight = new THREE.DirectionalLight( 0xffffff, 0.7 );
+                scene.add( directionalLight );
+
+
+
+                onDocumentKeyDown = (event) => {
+                    switch (event.key) {
+                        case 'w':
+                            if (sphere.position.y < 20) {
+                                sphere.position.y += verticalMovementValue;
+                            }
+                            break;
+                        case 's':
+                            if (sphere.position.y > 0) { // igy nem tudjuk levinni a palya ala a labdat
+                                sphere.position.y -= verticalMovementValue;
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                };
+
+                document.addEventListener("keydown", onDocumentKeyDown, false);
+
+
+                /**
+                * Mozgatja, es forgatja a labdat, valamint a kamerat
+                */
+                moveForward = () => {
+                    sphere.position.x += sphereMovementSpeed;
+                    sphere.rotation.x += sphereMovementSpeed / 5;
+                    sphere.rotation.y += sphereMovementSpeed / 5;
+                    camera.position.x += sphereMovementSpeed;
+                };
+
+                render = () => {
+                    stats.update();
+
+                    let collidedInThisFrame = false;
+                    let isItOver = collidableObjects[collidableObjects.length - 1].position.x < sphere.position.x - 20;
+                    if (isItOver) {
+                        if (confirm('Nyertel, jatszol meg?')) {
+                            window.location.reload();
+                        } else {
+                            window.close();
+                        }
+                    }
+                    for (let i = 0; i < collidableObjects.length; i++) {
+                        let cube = collidableObjects[i];
+                        let collidePos = cube.position.x,
+                         spherePos = sphere.position.x,
+                         distanceX = collidePos - spherePos;
+
+                        if (distanceX < 0) {
+                            moveForward();
+                            continue;
+                        }
+                        if (distanceX > 4) {
+                            // nincs kozelben doboz
+                            moveForward();
+                        } else {
+                            // van a kozelben doboz
+                            const cube_bbox = new THREE.Box3();
+                            cube_bbox.setFromObject(cube);
+                            const lowerObject = cube.position.y === 3;
+                            const sphereCollidePoint = sphere.position.y;
+                            const cubeCollidePoint = lowerObject ? cube_bbox.max.y : cube_bbox.min.y;
+                            if (lowerObject && cubeCollidePoint < sphereCollidePoint - 2 ||
+                            !lowerObject && cubeCollidePoint > sphereCollidePoint + 2) {
+                                moveForward();
+                            } else {
+                                collidedInThisFrame = true;
+                                break;
+                            } 
+                        }
+                    }
+
+                    if (collidedInThisFrame && confirm(`Vesztettel! Jatszol meg?`)){
+                        window.location.reload();
+                        return false;
+                    } else if (collidedInThisFrame) {
+                        window.close();
+                    }
+
+                    requestAnimationFrame(render);
+                    renderer.render(scene, camera);
+                };
+                render();
+		</script>
+	</body>
+</html>
