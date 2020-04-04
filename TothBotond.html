@@ -150,6 +150,7 @@
                     if (isItOver) {
                         if (confirm('Nyertel, jatszol meg?')) {
                             window.location.reload();
+                            return false;
                         } else {
                             window.close();
                         }
